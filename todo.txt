@@ -1,0 +1,5 @@
+1. cloned llama, can run another job on llama2 instead of llama 13b
+2. evaluate the metrics of graft naip and clip for the classification to compare performance
+3. run graft with mode detailed phrases
+4. currently running: summarization, going to take 4 hours
+  - need to find a metric for evaluating the summary

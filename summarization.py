@@ -15,6 +15,8 @@ from vllm import LLM, SamplingParams
 from tqdm import tqdm
 import os
 import torch
+from os.path import isfile
+# from rouge_score import rouge_scorer
 
 os.environ['TORCH_USE_CUDA_DSA'] = '1'
 
@@ -48,13 +50,17 @@ def read_satellite_centers(file_path):
     return satellite_centers
 
 def prompt_llama(captions):
-    formatted_captions = "\n".join([f"Caption {i+1}: {caption}" for i, caption in enumerate(captions)])
+    # formatted_captions = "\n".join([f"Caption {i+1}: {caption}" for i, caption in enumerate(captions)])
+    # prompt = (
+    #     f"Below are several image descriptions taken within a common region. "
+    #     "Please summarize the following descriptions to generate a comprehensive summary of the region.\n\n"
+    #     f"{formatted_captions}\n\n"
+    #     "Summarization:"
+    # )
+    formatted_captions = " ".join(captions)
     prompt = (
-        f"Below are several ground image descriptions associated with a satellite image. "
-        "Please summarize the following descriptions to generate a comprehensive summary of the satellite image."
-        "Note: for satellite image, emphasize on the general location.\n\n"
-        f"{formatted_captions}\n\n"
-        "Summarization:"
+        f"Summarize the text in bracket."
+        f"[{formatted_captions}]"
     )
     print(prompt)
     with torch.cuda.amp.autocast():
@@ -72,7 +78,7 @@ def save_summarizations(summarizations, output_file='summarizations_subset.csv')
             captions = "\n".join([f"{i+1}. {caption}" for i, caption in enumerate(data['captions'])])
             ground_image_ids = ", ".join(map(str, data['ground_image_ids']))  
             # satid = data['satellite_image_id']
-            writer.writerow([satid, summarization, captions, ground_image_ids, satid])
+            writer.writerow([satid, summarization, captions, ground_image_ids])
     print(f"Saved all summarizations to {output_file}")
 
 def main():
@@ -80,22 +86,30 @@ def main():
 
     captions_file = 'captions2.csv'
     satellite_centers_file = 'satellite_centers.pkl'
+    satellite_to_captions = 'satellite_to_captions.pkl'
 
-    captions = read_captions(captions_file)
-    satellite_centers = read_satellite_centers(satellite_centers_file)
+    start_over = False
+    if not isfile(satellite_to_captions) or start_over:
+        captions = read_captions(captions_file)
+        satellite_centers = read_satellite_centers(satellite_centers_file)
 
-    satellite_to_captions = {}
-    for sat_index, ground_image_ids in enumerate(satellite_centers['ImageIds']):
-        for ground_image_id in ground_image_ids:
-            if ground_image_id in captions:
-                if sat_index not in satellite_to_captions:
-                    satellite_to_captions[sat_index] = {'captions': [], 'ground_image_ids': []}
-                satellite_to_captions[sat_index]['captions'].append(captions[ground_image_id])
-                satellite_to_captions[sat_index]['ground_image_ids'].append(ground_image_id)
+        satellite_to_captions = {}
+        for sat_index, ground_image_ids in enumerate(satellite_centers['ImageIds']):
+            for ground_image_id in ground_image_ids:
+                if ground_image_id in captions:
+                    if sat_index not in satellite_to_captions:
+                        satellite_to_captions[sat_index] = {'captions': [], 'ground_image_ids': []}
+                    satellite_to_captions[sat_index]['captions'].append(captions[ground_image_id])
+                    satellite_to_captions[sat_index]['ground_image_ids'].append(ground_image_id)
 
+        with open('satellite_to_captions.pkl', 'wb') as file:
+            pickle.dump(satellite_to_captions, file)
+        
+    with open('satellite_to_captions.pkl', 'rb') as file:
+        satellite_to_captions = pickle.load(file)
                 
     summarizations = {}
-    count = 0
+    # count = 0
     for satid, data in tqdm(satellite_to_captions.items(), desc="Processing satellite images"):
         summarization = prompt_llama(data['captions'])
         summarizations[satid] = {
@@ -105,9 +119,9 @@ def main():
             # 'satellite_image_id': satid
         }
         torch.cuda.empty_cache()  # Clear GPU cache after each summarization
-        count += 1
-        if count == 3:
-            break
+        # count += 1
+        # if count == 10:
+        #     break
 
     save_summarizations(summarizations)
 if __name__ == '__main__':
