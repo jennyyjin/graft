@@ -1,3 +1,6 @@
 *.csv
 *.log
 *.pkl
+/output/
+/out/
+*.sub

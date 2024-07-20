@@ -1,6 +1,3 @@
-import multiprocessing
-multiprocessing.set_start_method('spawn', force=True)  # Set the start method at the top
-
 import pandas as pd
 import torch
 import transformers
@@ -8,11 +5,12 @@ from transformers import LlamaForCausalLM, LlamaTokenizer
 from tqdm import tqdm
 import csv
 
+# Load the model and tokenizer
 model_dir = "../llama/llama-2-7b-chat-hf"
 model = LlamaForCausalLM.from_pretrained(model_dir)
-
 tokenizer = LlamaTokenizer.from_pretrained(model_dir)
 
+# Setup the pipeline
 pipeline = transformers.pipeline(
     "text-generation",
     model=model,
@@ -22,28 +20,32 @@ pipeline = transformers.pipeline(
     device_map="auto",
 )
 
+# Read the input CSV file
 df = pd.read_csv('captions/sat_captions.csv')
 
+# Add a new column for summarization if it doesn't exist
 if 'Summarization' not in df.columns:
     df['Summarization'] = ""
 
+# Output CSV file path
 output_file = 'summarizations/summarizations-llama-2-7b-chat-hf.csv'
 
-# Write header to output file
+# Write the header to the output CSV file
 with open(output_file, 'w', newline='') as csvfile:
     writer = csv.writer(csvfile)
     writer.writerow(df.columns)
 
-def generate_summarization(row):
-    index, row_data = row
-    captions = row_data['Captions']
-
+# Process each row in the dataframe
+for index, row in tqdm(df.iterrows(), total=len(df), desc="Processing rows"):
+    captions = row['Captions']
+  
     prompt = (
         f"The texts in the bracket are descriptions of images taken in the same region. Summarize the text to describe the region."
         f"[{captions}]"
         " <Summarization>:"
     )
 
+    # Generate the summarization
     sequences = pipeline(
         prompt,
         do_sample=True,
@@ -53,6 +55,7 @@ def generate_summarization(row):
         max_length=600,
     )
 
+    # Extract the generated text
     text = []
     for seq in sequences:
         generated_text = seq['generated_text']
@@ -62,21 +65,18 @@ def generate_summarization(row):
         else:
             text.append(generated_text.strip())
 
-    summarization = " ".join(text)
-    row_data['Summarization'] = summarization
-    return row_data
+    # Update the dataframe with the summarization
+    df.at[index, 'Summarization'] = " ".join(text)
 
-def process_row(row):
-    result = generate_summarization(row)
+    # Append the updated row to the output CSV file
     with open(output_file, 'a', newline='') as csvfile:
         writer = csv.writer(csvfile)
-        writer.writerow(result.values)
-    return result
+        writer.writerow(df.loc[index].values)
 
-if __name__ == '__main__':
-    rows = list(df.iterrows())
+    # Clear GPU cache
+    torch.cuda.empty_cache()
 
-    with multiprocessing.Pool(multiprocessing.cpu_count()) as pool:
-        with tqdm(total=len(rows), desc="Processing rows") as pbar:
-            for _ in pool.imap_unordered(process_row, rows):
-                pbar.update()
+    # Optional: break after a certain number of rows for testing
+    # count += 1
+    # if count == 10:
+    #     break
