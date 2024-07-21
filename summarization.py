@@ -7,17 +7,18 @@ import csv
 
 # Load the model and tokenizer
 model_dir = "../llama/llama-2-7b-chat-hf"
-model = LlamaForCausalLM.from_pretrained(model_dir)
+model = LlamaForCausalLM.from_pretrained(
+    model_dir,
+    torch_dtype=torch.float16,  # Use mixed precision to save memory
+    device_map="auto"  # Automatically split the model across available devices
+)
 tokenizer = LlamaTokenizer.from_pretrained(model_dir)
 
 # Setup the pipeline
 pipeline = transformers.pipeline(
     "text-generation",
     model=model,
-    device="cuda:0",
-    tokenizer=tokenizer,
-    torch_dtype=torch.float16,
-    device_map="auto",
+    tokenizer=tokenizer
 )
 
 # Read the input CSV file
@@ -30,13 +31,23 @@ if 'Summarization' not in df.columns:
 # Output CSV file path
 output_file = 'summarizations/summarizations-llama-2-7b-chat-hf.csv'
 
-# Write the header to the output CSV file
-with open(output_file, 'w', newline='') as csvfile:
-    writer = csv.writer(csvfile)
-    writer.writerow(df.columns)
+# Determine the last processed row
+last_processed_index = -1
+try:
+    with open(output_file, 'r', newline='') as csvfile:
+        reader = csv.reader(csvfile)
+        for last_processed_index, _ in enumerate(reader):
+            pass
+except FileNotFoundError:
+    # Write the header to the output CSV file if it doesn't exist
+    with open(output_file, 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(df.columns)
+    last_processed_index = 0  # Start from the beginning
 
-# Process each row in the dataframe
-for index, row in tqdm(df.iterrows(), total=len(df), desc="Processing rows"):
+# count = 0
+# Process each row in the dataframe starting from the last processed row
+for index, row in tqdm(df.iloc[last_processed_index + 1:].iterrows(), total=len(df) - last_processed_index - 1, desc="Processing rows"):
     captions = row['Captions']
   
     prompt = (
@@ -52,7 +63,7 @@ for index, row in tqdm(df.iterrows(), total=len(df), desc="Processing rows"):
         top_k=10,
         num_return_sequences=1,
         eos_token_id=tokenizer.eos_token_id,
-        max_length=600,
+        max_new_tokens=200,
     )
 
     # Extract the generated text
