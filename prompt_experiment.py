@@ -6,6 +6,11 @@ from tqdm import tqdm
 import csv
 import os
 
+# no need to choose the prompt now, can experiment later
+# try out llama instruct
+# generate more summarizations
+# do a one shot or few shot prompting
+
 # Load the model and tokenizer
 model_dir = "../llama/llama-2-7b-chat-hf"
 model = LlamaForCausalLM.from_pretrained(
@@ -57,7 +62,7 @@ for prompt_format in prompts:
     first_prompt_logged = False
 
     # Process each row in the dataframe
-    for index, row in tqdm(df.iloc[:1500].iterrows(), total=1500, desc=f"Processing rows for prompt {prompts.index(prompt_format) + 1}"):
+    for index, row in tqdm(df.iloc[:2000].iterrows(), total=2000, desc=f"Processing rows for prompt {prompts.index(prompt_format) + 1}"):
         captions = row['Captions']
         prompt = prompt_format.format(captions)
         print(prompt)

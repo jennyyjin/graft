@@ -1,18 +1,23 @@
 import pandas as pd
 import torch
 import transformers
-from transformers import LlamaForCausalLM, LlamaTokenizer
+from transformers import LlamaForCausalLM, LlamaTokenizer, AutoTokenizer
 from tqdm import tqdm
 import csv
+import os
 
 # Load the model and tokenizer
-model_dir = "../llama/llama-2-7b-chat-hf"
+hf_token = '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'
+
+# Load the model and tokenizer
+model_name = "meta-llama/Meta-Llama-3-8B-Instruct"
 model = LlamaForCausalLM.from_pretrained(
-    model_dir,
-    torch_dtype=torch.float16,  # Use mixed precision to save memory
-    device_map="auto"  # Automatically split the model across available devices
+    model_name,
+    token=hf_token, 
+    torch_dtype=torch.float16, 
+    device_map="auto"
 )
-tokenizer = LlamaTokenizer.from_pretrained(model_dir)
+tokenizer = AutoTokenizer.from_pretrained(model_name, token=hf_token)
 
 # Setup the pipeline
 pipeline = transformers.pipeline(
@@ -22,40 +27,50 @@ pipeline = transformers.pipeline(
 )
 
 # Read the input CSV file
-df = pd.read_csv('captions/sat_captions.csv')
+df = pd.read_csv('captions/sat_captions_50k.csv')
 
 # Add a new column for summarization if it doesn't exist
 if 'Summarization' not in df.columns:
     df['Summarization'] = ""
 
-# Output CSV file path
-output_file = 'summarizations/summarizations-llama-2-7b-chat-hf.csv'
 
-# Determine the last processed row
-last_processed_index = -1
+# Output CSV file path
+output_dir = 'summarizations/llama-3-8b-instruct'
+os.makedirs(output_dir, exist_ok=True)
+output_file = os.path.join(output_dir, 'summarizations-llama-3-8b-instruct_subset.csv')
+
+# Determine the set of already processed SatelliteIDs
+processed_satellite_ids = set()
 try:
     with open(output_file, 'r', newline='') as csvfile:
         reader = csv.reader(csvfile)
-        for last_processed_index, _ in enumerate(reader):
-            pass
+        next(reader)  # Skip header
+        for row in reader:
+            processed_satellite_ids.add(int(row[0]))  # Assuming SatelliteID is the first column
 except FileNotFoundError:
     # Write the header to the output CSV file if it doesn't exist
     with open(output_file, 'w', newline='') as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow(df.columns)
-    last_processed_index = 0  # Start from the beginning
+        
+df = df[~df['SatelliteID'].isin(processed_satellite_ids)]
 
-# count = 0
-# Process each row in the dataframe starting from the last processed row
-for index, row in tqdm(df.iloc[last_processed_index + 1:].iterrows(), total=len(df) - last_processed_index - 1, desc="Processing rows"):
-    captions = row['Captions']
+count = 0 
+# Process each row in the dataframe
+for index, row in tqdm(df.iterrows(), total=len(df), desc="Processing rows"):
+    # satellite_id = row['SatelliteID']
   
+    # # Skip if the satellite image has been processed
+    # if satellite_id in processed_satellite_ids:
+    #     continue
+
+    captions = row['Captions']
     prompt = (
         f"The texts in the bracket are descriptions of images taken in the same region. Summarize the text to describe the region."
         f"[{captions}]"
         " <Summarization>:"
     )
-
+    print(prompt)
     # Generate the summarization
     sequences = pipeline(
         prompt,
@@ -84,10 +99,13 @@ for index, row in tqdm(df.iloc[last_processed_index + 1:].iterrows(), total=len(
         writer = csv.writer(csvfile)
         writer.writerow(df.loc[index].values)
 
+    # Add the processed SatelliteID to the set
+    # processed_satellite_ids.add(satellite_id)
+
     # Clear GPU cache
     torch.cuda.empty_cache()
 
     # Optional: break after a certain number of rows for testing
-    # count += 1
-    # if count == 10:
-    #     break
+    count += 1
+    if count == 10:
+        break
