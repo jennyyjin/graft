@@ -54,6 +54,7 @@ except FileNotFoundError:
         writer.writerow(df.columns)
         
 df = df[~df['SatelliteID'].isin(processed_satellite_ids)]
+df = df[df['GroundImageIDs'].str.count(',') > 0]
 
 count = 0 
 # Process each row in the dataframe

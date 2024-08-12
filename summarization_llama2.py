@@ -23,7 +23,8 @@ pipeline = transformers.pipeline(
 
 # Read the input CSV file
 # df = pd.read_csv('captions/sat_captions_50k.csv')
-df = pd.read_csv('captions/satellite_to_captions_indoor_outdoor.csv')
+# df = pd.read_csv('captions/sat_captions_100k.csv')
+df = pd.read_csv('captions/sat_captions_100ks_recentered.csv')
 
 # Add a new column for summarization if it doesn't exist
 if 'Summarization' not in df.columns:
@@ -31,7 +32,8 @@ if 'Summarization' not in df.columns:
 
 
 # Output CSV file path
-output_file = 'summarizations/summarizations-llama-2-7b-chat-hf-indoor-outdoor_2.csv'
+output_file = 'summarizations/summarizations-llama-2-7b-chat-hf_recentered.csv'
+# print(df.columns)
 
 # Determine the set of already processed SatelliteIDs
 processed_satellite_ids = set()
@@ -47,8 +49,10 @@ except FileNotFoundError:
         writer = csv.writer(csvfile)
         writer.writerow(df.columns)
         
-# df = df[~df['SatelliteID'].isin(processed_satellite_ids)]  # Remoave processed satellite image
+df = df[~df['SatelliteID'].isin(processed_satellite_ids)]  # Remoave processed satellite image
+df = df[df['GroundImageIDs'].str.count(',') > 0] # Remove satellite images with less than 2 ground images
 
+# count = 0
 # Process each row in the dataframe
 for index, row in tqdm(df.iterrows(), total=len(df), desc="Processing rows"):
     # satellite_id = row['SatelliteID']
@@ -65,7 +69,8 @@ for index, row in tqdm(df.iterrows(), total=len(df), desc="Processing rows"):
         f"[{captions}]"
         " <Summarization>:"
     )
-    print(prompt)
+    
+    # print(prompt)
 
     # Generate the summarization
     sequences = pipeline(
@@ -88,7 +93,7 @@ for index, row in tqdm(df.iterrows(), total=len(df), desc="Processing rows"):
             text.append(generated_text.strip())
 
     # Update the dataframe with the summarization
-    print(" ".join(text))
+    # print(" ".join(text))
     df.at[index, 'Summarization'] = " ".join(text)
 
     # Append the updated row to the output CSV file
