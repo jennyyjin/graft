@@ -8,7 +8,7 @@ if [ "$#" -ne 1 ]; then
     exit 1
 fi
 
-DATA_PATH_ROOT=$1
+DATA_PATH_ROOT = "/share/kavita/ukm4/datasets/CLIPRS10m_m2o/"
 
 # Run the Python script with the provided data_path_root
 python3 batch_captioning.py --data_path_root "$DATA_PATH_ROOT"
